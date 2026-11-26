@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP 地址去重工具</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 24px;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    line-height: 1.5;
+  }
+  h1 { font-size: 20px; margin: 0 0 16px 0; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 16px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #6e6e73;
+  }
+  textarea {
+    width: 100%;
+    min-height: 200px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    padding: 12px;
+    border: 1px solid #d1d1d6;
+    border-radius: 8px;
+    resize: vertical;
+  }
+  textarea:read-only { background: #fafafa; }
+  .row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-main {
+    padding: 11px 28px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    transition: opacity 0.15s;
+  }
+  .btn-main:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-select { background: #0a84ff; }
+  .btn-auto { background: #34c759; }
+  .btn-secondary {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #8e8e93;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-secondary:hover:not(:disabled) { background: #777; }
+  .stats { margin-top: 12px; font-size: 13px; color: #6e6e73; }
+  .hint { font-size: 12px; color: #8e8e93; margin-top: 10px; }
+
+  /* 提示 Toast */
+  #toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(30,30,32,0.92);
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 10px;
+    font-size: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    z-index: 200;
+    white-space: nowrap;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* 弹窗 */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 100;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 16px;
+    overflow: auto;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 720px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    overflow: hidden;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e5e5e5;
+    background: #fafafa;
+  }
+  .modal-header h2 { font-size: 15px; margin: 0; }
+  .modal-header .close {
+    border: none;
+    background: none;
+    font-size: 20px;
+    color: #8e8e93;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-body { padding: 16px 20px; max-height: 60vh; overflow: auto; }
+  .modal-summary {
+    font-size: 13px;
+    color: #6e6e73;
+    margin-bottom: 12px;
+  }
+  .modal-summary b { color: #1d1d1f; }
+
+  /* 表格 */
+  .dup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .dup-table th {
+    text-align: left;
+    padding: 8px 10px;
+    background: #f5f5f7;
+    color: #6e6e73;
+    font-weight: 600;
+    font-size: 11px;
+    border-bottom: 1px solid #e0e0e5;
+    position: sticky;
+    top: 0;
+  }
+  .dup-table th:first-child { width: 30px; text-align: center; }
+  .dup-table th:nth-child(2) { width: 34px; text-align: center; }
+  .dup-table th:nth-child(3) { width: 220px; }
+  .dup-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    vertical-align: middle;
+    word-break: break-all;
+  }
+  .dup-table td:first-child { text-align: center; }
+  .dup-table td:nth-child(2) { text-align: center; color: #8e8e93; font-size: 11px; }
+  .dup-table tr { cursor: pointer; transition: box-shadow 0.12s; }
+  .dup-table tr:hover { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); }
+  .dup-table tr.selected { box-shadow: inset 3px 0 0 #0a84ff; }
+  .dup-table tr.hidden-row { display: none; }
+  .dup-table input[type="radio"] { accent-color: #0a84ff; margin-top: 2px; }
+
+  .suffix-input {
+    width: 100%;
+    border: 1px solid transparent;
+    background: rgba(255,255,255,0.6);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    outline: none;
+    color: #1d1d1f;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .suffix-input:focus {
+    border-color: #0a84ff;
+    background: #fff;
+  }
+  .suffix-input::placeholder { color: #b0b0b5; }
+
+  .original-data {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: #9a9a9e;
+    word-break: break-all;
+  }
+
+  .pager {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    align-items: center;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .pager button {
+    min-width: 32px;
+    height: 32px;
+    border: 1px solid #d1d1d6;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d1d1f;
+    cursor: pointer;
+  }
+  .pager button:hover:not(:disabled) { background: #f0f0f0; }
+  .pager button.active { background: #0a84ff; color: #fff; border-color: #0a84ff; }
+  .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pager .ellipsis { color: #8e8e93; padding: 0 2px; }
+  .pager-info { font-size: 12px; color: #8e8e93; margin-left: 8px; }
+
+  .modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: #fafafa;
+  }
+</style>
+</head>
+<body>
+<h1>IP 地址去重（按 IP+端口）</h1>
+
+<div class="card">
+  <label>粘贴节点列表（每条一行，或以 \ 分隔）</label>
+  <textarea id="input" placeholder="23.227.38.65:443#Hong Kong-18.25MB/s
+172.64.146.157#低延迟-优选
+104.18.33.45:443#Hong Kong-21.77MB/s"></textarea>
+  <div class="row">
+    <div class="btn-group">
+      <button class="btn-main btn-select" id="btnSelect">选择去重</button>
+      <button class="btn-main btn-auto" id="btnAuto">一键去重</button>
+    </div>
+    <button id="btnClear" class="btn-secondary">清空</button>
+    <button id="btnCopy" class="btn-secondary">复制结果</button>
+    <button id="btnDownload" class="btn-secondary">下载结果</button>
+  </div>
+  <div class="hint">
+    <b>选择去重</b>：弹出表格展示重复项，每组选 1 条，后缀可手动修改，选完点「去重」。<br>
+    <b>一键去重</b>：自动保留每组中排在最后面的 1 条，直接出结果。
+  </div>
+  <div class="stats" id="stats">共 0 条，去重后 0 条，重复 0 条</div>
+</div>
+
+<div class="card">
+  <label>去重结果（格式：IP:端口#后缀）</label>
+  <textarea id="output" readonly placeholder="去重结果将显示在这里"></textarea>
+</div>
+
+<!-- 提示 -->
+<div id="toast"></div>
+
+<!-- 选择去重弹窗 -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>重复项 — 每组选择保留 1 条</h2>
+      <button class="close" id="btnCloseModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-summary" id="modalSummary"></div>
+      <table class="dup-table">
+        <thead>
+          <tr><th></th><th></th><th>后缀（可编辑）</th><th>原始数据</th></tr>
+        </thead>
+        <tbody id="dupTableBody"></tbody>
+      </table>
+      <div class="pager" id="pager"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="btnCancel">取消</button>
+      <button class="btn-main btn-select" id="btnModalDedup">去重</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const input = document.getElementById('input');
+  const output = document.getElementById('output');
+  const btnSelect = document.getElementById('btnSelect');
+  const btnAuto = document.getElementById('btnAuto');
+  const btnClear = document.getElementById('btnClear');
+  const btnCopy = document.getElementById('btnCopy');
+  const btnDownload = document.getElementById('btnDownload');
+  const stats = document.getElementById('stats');
+
+  const overlay = document.getElementById('overlay');
+  const btnCloseModal = document.getElementById('btnCloseModal');
+  const btnCancel = document.getElementById('btnCancel');
+  const btnModalDedup = document.getElementById('btnModalDedup');
+  const modalSummary = document.getElementById('modalSummary');
+  const dupTableBody = document.getElementById('dupTableBody');
+  const pager = document.getElementById('pager');
+  const toast = document.getElementById('toast');
+
+  const ipPortRe = /(\d{1,3}(?:\.\d{1,3}){3}:\d+)/;
+  const ipRe = /(\d{1,3}(?:\.\d{1,3}){3})/;
+  const PAGE_SIZE = 8;
+
+  const SOFT_COLORS = [
+    '#E8F5E9', '#E3F2FD', '#FCE4EC', '#FFF3E0',
+    '#F3E5F5', '#E0F7FA', '#FFF8E1', '#F1F8E9',
+    '#E8EAF6', '#FBE9E7', '#E0F2F1', '#FFF9C4'
+  ];
+
+  let currentEntries = [];
+  let currentCounts = new Map();
+  let dupRows = [];
+  let groupOrder = [];
+  let groupColorIndex = new Map();
+  let totalPages = 1;
+  let currentPage = 1;
+  let toastTimer = null;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toast.classList.remove('show'); }, 2200);
+  }
+
+  function parseEntries(text) {
+    const normalized = text.replace(/\\\s*\n/g, '\n').replace(/\\/g, '\n');
+    const lines = normalized.split(/\r?\n/);
+    const entries = [];
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      const base = line.split('#')[0].trim();
+      let key;
+      const mPort = line.match(ipPortRe);
+      if (mPort) key = mPort[1];
+      else { const mIp = base.match(ipRe) || line.match(ipRe); if (mIp) key = mIp[1]; else key = base; }
+      entries.push({ key, line, idx: entries.length });
+    }
+    return entries;
+  }
+
+  function computeCounts(entries) {
+    const counts = new Map();
+    for (const e of entries) counts.set(e.key, (counts.get(e.key) || 0) + 1);
+    return counts;
+  }
+
+  function extractSuffix(line) {
+    const idx = line.indexOf('#');
+    if (idx >= 0) return line.slice(idx + 1);
+    return '';
+  }
+
+  function updateStats(total, resultLength, dupCount) {
+    stats.textContent = '共 ' + total + ' 条，去重后 ' + resultLength + ' 条，重复 ' + dupCount + ' 条';
+  }
+
+  function runAutoMode() {
+    const text = input.value;
+    if (!text.trim()) {
+      showToast('请先粘贴数据');
+      output.value = '';
+      return;
+    }
+    currentEntries = parseEntries(text);
+    currentCounts = computeCounts(currentEntries);
+    const total = currentEntries.length;
+    const dupCount = total - new Set(currentEntries.map(e => e.key)).size;
+
+    if (dupCount === 0) {
+      const result = currentEntries.map(function(e) {
+        return e.key + '#' + extractSuffix(e.line);
+      });
+      output.value = result.join('\n');
+      updateStats(total, total, 0);
+      showToast('没有重复数据，已保留全部');
+      return;
+    }
+
+    const result = computeAutoDedup(currentEntries, currentCounts);
+    output.value = result.join('\n');
+    updateStats(total, result.length, dupCount);
+    showToast('一键去重完成，已去除 ' + dupCount + ' 条重复');
+  }
+
+  function computeAutoDedup(entries, counts) {
+    const lastIdxByKey = new Map();
+    for (const e of entries) lastIdxByKey.set(e.key, e.idx);
+    return entries
+      .filter(function(e) { return counts.get(e.key) === 1 || lastIdxByKey.get(e.key) === e.idx; })
+      .map(function(e) {
+        return e.key + '#' + extractSuffix(e.line);
+      });
+  }
+
+  function runSelectMode() {
+    const text = input.value;
+    if (!text.trim()) {
+      showToast('请先粘贴数据');
+      output.value = '';
+      return;
+    }
+    currentEntries = parseEntries(text);
+    currentCounts = computeCounts(currentEntries);
+    const total = currentEntries.length;
+    const dupCount = total - new Set(currentEntries.map(e => e.key)).size;
+    const uniqueKeyCount = total - dupCount;
+
+    dupRows = [];
+    groupOrder = [];
+    groupColorIndex = new Map();
+    const groupMap = new Map();
+    for (const e of currentEntries) {
+      if (currentCounts.get(e.key) > 1) {
+        if (!groupMap.has(e.key)) {
+          groupMap.set(e.key, []);
+          groupOrder.push(e.key);
+        }
+        groupMap.get(e.key).push(e);
+      }
+    }
+    groupOrder.forEach(function(key, i) {
+      groupColorIndex.set(key, i % SOFT_COLORS.length);
+    });
+
+    for (const key of groupOrder) {
+      for (const e of groupMap.get(key)) {
+        dupRows.push({
+          idx: e.idx,
+          key: e.key,
+          line: e.line,
+          suffix: extractSuffix(e.line)
+        });
+      }
+    }
+
+    if (dupRows.length === 0) {
+      const result = currentEntries.map(function(e) {
+        return e.key + '#' + extractSuffix(e.line);
+      });
+      output.value = result.join('\n');
+      updateStats(total, total, 0);
+      showToast('没有重复数据，已保留全部');
+      return;
+    }
+
+    totalPages = Math.max(1, Math.ceil(dupRows.length / PAGE_SIZE));
+    currentPage = 1;
+
+    renderTable();
+    renderPager();
+    showPage(currentPage);
+
+    modalSummary.innerHTML = '共 <b>' + groupOrder.length + '</b> 组重复，<b>' + dupRows.length + '</b> 条数据。每组选 1 条，后缀可直接修改，勾选跨页保留。';
+
+    updateStats(total, uniqueKeyCount, dupCount);
+    overlay.classList.add('show');
+  }
+
+  function renderTable() {
+    dupTableBody.innerHTML = '';
+    for (let i = 0; i < dupRows.length; i++) {
+      const r = dupRows[i];
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-row', String(i));
+      tr.style.backgroundColor = SOFT_COLORS[groupColorIndex.get(r.key)];
+
+      const tdRadio = document.createElement('td');
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'grp_' + r.key;
+      radio.value = String(r.idx);
+      radio.addEventListener('change', function() {
+        const name = 'grp_' + r.key;
+        document.querySelectorAll('input[name="' + name + '"]').forEach(function(el) {
+          el.closest('tr').classList.remove('selected');
+        });
+        tr.classList.add('selected');
+      });
+      tdRadio.appendChild(radio);
+
+      const tdNo = document.createElement('td');
+      tdNo.textContent = String(i + 1);
+
+      const tdSuffix = document.createElement('td');
+      const suffixInput = document.createElement('input');
+      suffixInput.type = 'text';
+      suffixInput.className = 'suffix-input';
+      suffixInput.value = r.suffix;
+      suffixInput.placeholder = '添加备注';
+      tdSuffix.appendChild(suffixInput);
+
+      const tdOrig = document.createElement('td');
+      tdOrig.className = 'original-data';
+      tdOrig.textContent = r.line;
+
+      tr.appendChild(tdRadio);
+      tr.appendChild(tdNo);
+      tr.appendChild(tdSuffix);
+      tr.appendChild(tdOrig);
+      dupTableBody.appendChild(tr);
+    }
+
+    for (const key of groupOrder) {
+      const groupRows = dupRows.filter(function(r) { return r.key === key; });
+      if (groupRows.length > 0) {
+        const firstRadio = document.querySelector('input[name="grp_' + key + '"][value="' + groupRows[0].idx + '"]');
+        if (firstRadio) {
+          firstRadio.checked = true;
+          firstRadio.closest('tr').classList.add('selected');
+        }
+      }
+    }
+  }
+
+  function showPage(page) {
+    currentPage = page;
+    const rows = dupTableBody.querySelectorAll('tr');
+    rows.forEach(function(tr, i) {
+      const isCurrent = (i >= (page - 1) * PAGE_SIZE) && (i < page * PAGE_SIZE);
+      tr.classList.toggle('hidden-row', !isCurrent);
+    });
+    renderPager();
+  }
+
+  function renderPager() {
+    pager.innerHTML = '';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = '上一页';
+    prevBtn.disabled = currentPage <= 1;
+    prevBtn.addEventListener('click', function() { if (currentPage > 1) showPage(currentPage - 1); });
+    pager.appendChild(prevBtn);
+
+    const pages = pageList(currentPage, totalPages);
+    for (const p of pages) {
+      if (p === '...') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'ellipsis';
+        ellipsis.textContent = '…';
+        pager.appendChild(ellipsis);
+      } else {
+        const btn = document.createElement('button');
+        btn.textContent = String(p);
+        if (p === currentPage) btn.classList.add('active');
+        btn.addEventListener('click', function() { showPage(p); });
+        pager.appendChild(btn);
+      }
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = '下一页';
+    nextBtn.disabled = currentPage >= totalPages;
+    nextBtn.addEventListener('click', function() { if (currentPage < totalPages) showPage(currentPage + 1); });
+    pager.appendChild(nextBtn);
+
+    const info = document.createElement('span');
+    info.className = 'pager-info';
+    info.textContent = '第 ' + currentPage + ' / ' + totalPages + ' 页';
+    pager.appendChild(info);
+  }
+
+  function pageList(cur, total) {
+    const pages = [];
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+      return pages;
+    }
+    pages.push(1);
+    if (cur > 3) pages.push('...');
+    const start = Math.max(2, cur - 1);
+    const end = Math.min(total - 1, cur + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (cur < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+  }
+
+  function computeSelectDedup() {
+    const selectedByKey = new Map();
+    for (const key of groupOrder) {
+      const radio = document.querySelector('input[name="grp_' + key + '"]:checked');
+      if (radio) {
+        const tr = radio.closest('tr');
+        const suffixInput = tr.querySelector('.suffix-input');
+        const suffix = suffixInput ? suffixInput.value.trim() : '';
+        selectedByKey.set(key, { idx: parseInt(radio.value, 10), suffix: suffix });
+      }
+    }
+
+    const result = [];
+    for (const e of currentEntries) {
+      if (currentCounts.get(e.key) === 1) {
+        result.push(e.key + '#' + extractSuffix(e.line));
+      } else {
+        const sel = selectedByKey.get(e.key);
+        if (sel && sel.idx === e.idx) {
+          result.push(e.key + '#' + sel.suffix);
+        }
+      }
+    }
+    return result;
+  }
+
+  function doModalDedup() {
+    const result = computeSelectDedup();
+    output.value = result.join('\n');
+    const total = currentEntries.length;
+    const dupCount = total - new Set(currentEntries.map(e => e.key)).size;
+    updateStats(total, result.length, dupCount);
+    closeModal();
+    showToast('去重完成，已去除 ' + dupCount + ' 条重复');
+  }
+
+  function closeModal() {
+    overlay.classList.remove('show');
+  }
+
+  btnSelect.addEventListener('click', runSelectMode);
+  btnAuto.addEventListener('click', runAutoMode);
+  btnModalDedup.addEventListener('click', doModalDedup);
+  btnCloseModal.addEventListener('click', closeModal);
+  btnCancel.addEventListener('click', closeModal);
+
+  btnClear.addEventListener('click', function() {
+    input.value = '';
+    output.value = '';
+    stats.textContent = '共 0 条，去重后 0 条，重复 0 条';
+    closeModal();
+    input.focus();
+  });
+
+  btnCopy.addEventListener('click', async function() {
+    if (!output.value) return;
+    try {
+      await navigator.clipboard.writeText(output.value);
+      const old = btnCopy.textContent;
+      btnCopy.textContent = '已复制';
+      setTimeout(function() { btnCopy.textContent = old; }, 1200);
+    } catch (e) {
+      output.select();
+      document.execCommand('copy');
+    }
+  });
+
+  btnDownload.addEventListener('click', function() {
+    if (!output.value) return;
+    const blob = new Blob([output.value], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ip_dedup_result.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>

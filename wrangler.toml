@@ -1,0 +1,5 @@
+name = "ipdistict"
+compatibility_date = "2026-11-26"
+
+[pages]
+build_output = "."
